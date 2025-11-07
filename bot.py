@@ -10,13 +10,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SimpleSanskritBot:
-    """Direct model access without RAG, memory, or database"""
-    
     def __init__(self):
-        self.openrouter_api_key = "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"
+        # Read from environment variable (for Render deployment)
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        
+        if not self.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY not set")
+            
         self.openrouter_url = "https://openrouter.ai/api/v1/chat/completions"
         self.model = "meta-llama/llama-4-maverick:free"
-        # Store only current conversation per user (no persistence)
         self.user_conversations = {}
     
     def call_model(self, user_id, question):
