@@ -3,6 +3,8 @@ import requests
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -44,12 +46,11 @@ class SimpleSanskritBot:
             ]
             messages.extend(self.user_conversations[user_id])
             
-            # FIX: Add required HTTP-Referer header
             headers = {
                 "Authorization": f"Bearer {self.openrouter_api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/yourusername/sanskritbot",  # Required by OpenRouter
-                "X-Title": "Sanskrit Bot"  # Optional but recommended
+                "HTTP-Referer": "https://github.com/yourusername/sanskritbot",
+                "X-Title": "Sanskrit Bot"
             }
             
             data = {
@@ -91,6 +92,24 @@ class SimpleSanskritBot:
 
 bot = SimpleSanskritBot()
 
+# Health check handler for Render
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(b'Bot is running')
+    
+    def log_message(self, format, *args):
+        pass  # Suppress logs
+
+def run_health_server():
+    """Run simple HTTP server for Render health checks"""
+    port = int(os.getenv('PORT', 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    print(f"🏥 Health check server running on port {port}")
+    server.serve_forever()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command"""
     keyboard = [["🗑️ Clear Chat"]]
@@ -131,6 +150,10 @@ def main():
     if not TOKEN:
         print("ERROR: Set TELEGRAM_BOT_TOKEN environment variable")
         return
+    
+    # Start health check server in background thread
+    health_thread = Thread(target=run_health_server, daemon=True)
+    health_thread.start()
     
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
