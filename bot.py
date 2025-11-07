@@ -11,13 +11,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SimpleSanskritBot:
+    """Direct model access without RAG, memory, or database"""
+    
     def __init__(self):
-        # Read from environment variable (for Render deployment)
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-        
         if not self.openrouter_api_key:
             raise ValueError("OPENROUTER_API_KEY not set")
-            
+        
         self.openrouter_url = "https://openrouter.ai/api/v1/chat/completions"
         self.model = "meta-llama/llama-4-maverick:free"
         self.user_conversations = {}
@@ -25,21 +25,17 @@ class SimpleSanskritBot:
     def call_model(self, user_id, question):
         """Direct model call with basic conversation history"""
         try:
-            # Initialize conversation if needed
             if user_id not in self.user_conversations:
                 self.user_conversations[user_id] = []
             
-            # Add current question to conversation
             self.user_conversations[user_id].append({
                 "role": "user",
                 "content": question
             })
             
-            # Keep only last 10 messages to avoid token limits
             if len(self.user_conversations[user_id]) > 10:
                 self.user_conversations[user_id] = self.user_conversations[user_id][-10:]
             
-            # Prepare messages
             messages = [
                 {
                     "role": "system",
@@ -48,10 +44,12 @@ class SimpleSanskritBot:
             ]
             messages.extend(self.user_conversations[user_id])
             
-            # API call
+            # FIX: Add required HTTP-Referer header
             headers = {
                 "Authorization": f"Bearer {self.openrouter_api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/yourusername/sanskritbot",  # Required by OpenRouter
+                "X-Title": "Sanskrit Bot"  # Optional but recommended
             }
             
             data = {
@@ -71,7 +69,6 @@ class SimpleSanskritBot:
             
             if 'choices' in result and len(result['choices']) > 0:
                 answer = result['choices'][0]['message']['content']
-                # Add assistant response to conversation
                 self.user_conversations[user_id].append({
                     "role": "assistant",
                     "content": answer
@@ -92,7 +89,6 @@ class SimpleSanskritBot:
         if user_id in self.user_conversations:
             self.user_conversations[user_id] = []
 
-# Initialize bot
 bot = SimpleSanskritBot()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -114,14 +110,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     
-    # Check for Clear button
     if text == "🗑️ Clear Chat":
         bot.clear_conversation(user_id)
         await update.message.reply_text("✓ Chat cleared!")
         await update.message.delete()
         return
     
-    # Process question
     thinking = await update.message.reply_text("⌛ Processing...")
     answer = bot.call_model(user_id, text)
     await thinking.delete()
@@ -133,19 +127,24 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Start bot"""
-    TOKEN = "8277012435:AAHLywMKJLcC7DizR-8MSeKY4VX-CbTHOCg"
+    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not TOKEN:
+        print("ERROR: Set TELEGRAM_BOT_TOKEN environment variable")
+        return
     
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
     app.add_error_handler(error_handler)
     
-    print("\n🤖 Simple Sanskrit Bot")
+    print("
+🤖 Simple Sanskrit Bot")
     print("="*40)
     print("🔌 Direct OpenRouter Connection")
-    print("📝 Basic Conversation Memory (in-memory only)")
+    print("📝 Basic Conversation Memory")
     print("="*40)
-    print("Press Ctrl+C to stop\n")
+    print("Press Ctrl+C to stop
+")
     
     app.run_polling()
 
